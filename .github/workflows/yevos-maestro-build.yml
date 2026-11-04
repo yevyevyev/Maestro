@@ -24,7 +24,7 @@ jobs:
           unzip -q "$archive" -d dist
           folder="$(find dist -mindepth 1 -maxdepth 1 -type d -print -quit)"
           test -x "$folder/bin/maestro"
-          mv "$folder" dist/maestro
+          if [ "$folder" != "dist/maestro" ]; then mv "$folder" dist/maestro; fi
           cd dist
           zip -qr ../maestro-yevos.zip maestro
       - name: Publish immutable commit-tagged release
