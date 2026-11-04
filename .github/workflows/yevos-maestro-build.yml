@@ -1,0 +1,37 @@
+name: yevOS patched Maestro distribution
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build Maestro distribution
+        run: ./gradlew :maestro-cli:distZip --no-daemon
+      - name: Package Nix-compatible zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          archive="$(find maestro-cli/build/distributions -maxdepth 1 -name '*.zip' -print -quit)"
+          test -n "$archive"
+          unzip -q "$archive" -d dist
+          folder="$(find dist -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          test -x "$folder/bin/maestro"
+          mv "$folder" dist/maestro
+          cd dist
+          zip -qr ../maestro-yevos.zip maestro
+      - name: Publish immutable commit-tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="yevos-adb-${GITHUB_SHA}"
+          gh release create "$tag" maestro-yevos.zip --target "$GITHUB_SHA" --title "yevos Maestro ADB fix ${GITHUB_SHA}" --notes "Temporary fix for mobile-dev-inc/Maestro#3461. Replace with upstream after fix."
