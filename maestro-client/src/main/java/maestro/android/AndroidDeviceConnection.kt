@@ -425,7 +425,8 @@ class AndroidDeviceConnection private constructor(
 
         /** Discover a single device reachable through [host]. */
         fun discover(host: String, driverHostPort: Int = DEFAULT_DRIVER_HOST_PORT): AndroidDeviceConnection? {
-            val dadb = if (configuredAdbPort() == null) Dadb.discover(host) else discoveredDadbs(host).firstOrNull()\n                ?: return null
+            val dadb = (if (configuredAdbPort() == null) Dadb.discover(host) else discoveredDadbs(host).firstOrNull())
+                ?: return null
             return wrap(dadb, Endpoint(host, discoveryPort()), driverHostPort)
         }
 
