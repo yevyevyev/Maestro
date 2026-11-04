@@ -404,10 +404,29 @@ class AndroidDeviceConnection private constructor(
             return wrap(dadb, Endpoint(host, port), driverHostPort)
         }
 
+        // Temporary yevOS compatibility fix for upstream issue #3461:
+        // https://github.com/mobile-dev-inc/Maestro/issues/3461
+        // Remove when Maestro upstream honors ANDROID_ADB_SERVER_PORT.
+        private fun configuredAdbPort(): Int? {
+            val raw = System.getenv("ANDROID_ADB_SERVER_PORT")?.takeIf { it.isNotBlank() } ?: return null
+            val port = raw.toIntOrNull()
+            require(port != null && port in 1..65535) {
+                "ANDROID_ADB_SERVER_PORT must be an integer between 1 and 65535"
+            }
+            return port
+        }
+
+        private fun discoveredDadbs(host: String): List<Dadb> {
+            val port = configuredAdbPort() ?: return Dadb.list(host)
+            return AdbServer.listDadbs(adbServerHost = host, adbServerPort = port)
+        }
+
+        private fun discoveryPort(): Int = configuredAdbPort() ?: DEFAULT_ADB_SERVER_PORT
+
         /** Discover a single device reachable through [host]. */
         fun discover(host: String, driverHostPort: Int = DEFAULT_DRIVER_HOST_PORT): AndroidDeviceConnection? {
-            val dadb = Dadb.discover(host) ?: return null
-            return wrap(dadb, Endpoint(host, DEFAULT_ADB_SERVER_PORT), driverHostPort)
+            val dadb = if (configuredAdbPort() == null) Dadb.discover(host) else discoveredDadbs(host).firstOrNull()\n                ?: return null
+            return wrap(dadb, Endpoint(host, discoveryPort()), driverHostPort)
         }
 
         /** Find the device whose serial equals [deviceId] among those reachable through [host]. */
@@ -416,7 +435,7 @@ class AndroidDeviceConnection private constructor(
             host: String = "localhost",
             driverHostPort: Int = DEFAULT_DRIVER_HOST_PORT,
         ): AndroidDeviceConnection? {
-            val dadb = Dadb.list(host).find { it.toString() == deviceId } ?: return null
+            val dadb = discoveredDadbs(host).find { it.toString() == deviceId } ?: return null
             return wrap(dadb, Endpoint(host, DEFAULT_ADB_SERVER_PORT), driverHostPort)
         }
 
@@ -439,13 +458,13 @@ class AndroidDeviceConnection private constructor(
             host: String = "localhost",
             driverHostPort: Int = DEFAULT_DRIVER_HOST_PORT,
         ): AndroidDeviceConnection? {
-            val dadb = Dadb.list(host).lastOrNull { it.toString() !in connectedSerials } ?: return null
+            val dadb = discoveredDadbs(host).lastOrNull { it.toString() !in connectedSerials } ?: return null
             return wrap(dadb, Endpoint(host, DEFAULT_ADB_SERVER_PORT), driverHostPort)
         }
 
         /** Enumerate every device reachable through [host]. Each connection must be closed by the caller. */
         fun list(host: String = "localhost", driverHostPort: Int = DEFAULT_DRIVER_HOST_PORT): List<AndroidDeviceConnection> =
-            Dadb.list(host).map { wrap(it, Endpoint(host, DEFAULT_ADB_SERVER_PORT), driverHostPort) }
+            discoveredDadbs(host).map { wrap(it, Endpoint(host, discoveryPort()), driverHostPort) }
 
         /** Enumerate every device reachable through the adb server on [adbServerPort]. */
         fun listFromAdbServer(
